@@ -12,6 +12,7 @@
 #include <time.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <sys/sem.h>
 
 
 void* f_pipe_w(void* arg)
@@ -109,6 +110,61 @@ void* f_msgqueue_r(void* arg) // 这里关
                                                          msg.a[1],
                                                          msg.a[2],
                                                          msg.c);
+    return NULL;
+}
+
+void* f_semaphore_w(void* arg)
+{
+    char* const semfile = "/etc/passwd";
+    key_t key;
+    int proj_id = 'z';
+    int semid;
+
+    sleep(1); // 等待 f_semaphore_r 初始化, 如果没有初始化 semid集 就V操作，之后P操作是没有资源的
+
+    key = ftok(semfile, 'z');
+    semid = semget(key, 1, IPC_CREAT|0666);
+
+    // v操作 释放资源
+    struct sembuf sbuf = {0};
+    sbuf.sem_num = 0;
+    sbuf.sem_op = 1;
+    sbuf.sem_flg = SEM_UNDO;
+    semop(semid, &sbuf, 1);
+    printf("[[[ semaphore_w ]]]: oprate V\n");
+
+    return NULL;
+}
+
+void* f_semaphore_r(void* arg)
+{
+    char* const semfile = "/etc/passwd";
+    key_t key;
+    int proj_id = 'z';
+    int semid;
+
+    key = ftok(semfile, 'z');
+    semid = semget(key, 1, IPC_CREAT|0666);
+
+    // init
+    semctl(semid, 0, SETVAL, 0);
+    // semctl(semid, 0, SETVAL, 1); 信号量集semid 中序号0信号量 初始化成 1, 可以做互斥信号量使用
+    printf("[[[ semaphore_r ]]]: init\n");
+
+    // p操作 等待资源
+    struct sembuf sbuf = {0};
+    sbuf.sem_num = 0; // 信号量序号
+    sbuf.sem_op = -1; // p操作
+    sbuf.sem_flg = SEM_UNDO;  // 当信号量操作导致进程被阻塞（比如等待信号量为0时），然后进程被信号中断，
+                              // 导致操作未完成，此时如果设置了SEM_UNDO标志，
+                              // 系统会自动撤销之前对信号量的操作，使得信号量的值回到原来的状态
+                              // 简而言之，SEM_UNDO标志用于确保信号量操作的原子性，以避免因为进程意外终止而导致的资源泄漏或者状态异常
+    semop(semid, &sbuf, 1); // 操作个数是1，sbf可以是一个数组
+    printf("[[[ semaphore_r ]]]: oprate P\n");
+
+    // del_sem
+    semctl(semid, 0, IPC_RMID);
+    return NULL;
 }
 
 typedef struct {
@@ -121,6 +177,7 @@ pcontext pcont[] = {
     {"pipe", f_pipe_w, f_pipe_r},
     {"fifo", f_fifo_w, f_fifo_r},
     {"msg queue", f_msgqueue_w, f_msgqueue_r},    // 传递数据
+    {"semaphore", f_semaphore_w, f_semaphore_r},  // 一般仅计数
 };
 
 int main(int argc, char** argv)
