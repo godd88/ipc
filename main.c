@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <time.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 
 
 void* f_pipe_w(void* arg)
@@ -65,6 +67,52 @@ void* f_fifo_r(void* arg)
 }
 
 typedef struct {
+    long mtype;  // 第一成员必须是类型
+    int a[3];    // 后面的成员无所谓
+    char c;
+} msq_st;
+
+void* f_msgqueue_r(void*) // 这里关
+{
+    char* const msqfile = "/etc/passwd";
+    key_t key;
+    int proj_id = 'z';
+    int msqid;
+    msq_st msg = {0};
+
+    key = ftok(msqfile, proj_id);
+    msqid = msgget(key, IPC_CREAT|0777);
+
+    msgrcv(msqid, &msg, sizeof(msg.a) + sizeof(msg.c), 888, 0);
+    printf("msgqueue_r: mtype=%ld, a={%d,%d,%d}, c=%c\n", msg.mtype,
+                                                         msg.a[0],
+                                                         msg.a[1],
+                                                         msg.a[2],
+                                                         msg.c);
+}
+
+void* f_msgqueue_w(void*)
+{
+    char* const msqfile = "/etc/passwd";
+    key_t key;
+    int proj_id = 'z';
+    int msqid;
+    msq_st msg = {0};
+
+    key = ftok(msqfile, proj_id);
+    msqid = msgget(key, IPC_CREAT|0777);
+
+    msg.mtype = 888; // 设置一个 类型
+    msg.a[0] = 111;
+    msg.a[2] = 333;
+    msg.c = 'X';
+
+    msgsnd(msqid, &msg, sizeof(msg.a) + sizeof(msg.c), 0);
+
+    return NULL;
+}
+
+typedef struct {
     void* desc;
     void*(*f_w)(void*);
     void*(*f_r)(void*);
@@ -73,6 +121,7 @@ typedef struct {
 pcontext pcont[] = {
     {"pipe", f_pipe_w, f_pipe_r},
     {"fifo", f_fifo_w, f_fifo_r},
+    {"msg queue", f_msgqueue_w, f_msgqueue_r},
 };
 
 int main(int argc, char** argv)
