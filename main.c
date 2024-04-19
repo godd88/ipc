@@ -16,12 +16,12 @@
 
 void* f_pipe_w(void* arg)
 {
-    printf("%s_w: pipe() first then fork(), so don't test\n", (char*)arg);
+    // printf("[[[ %s_w ]]]: pipe() first then fork(), so don't test\n", (char*)arg);
     return NULL;
 }
 void* f_pipe_r(void* arg)
 {
-    printf("%s_r: pipe() first then fork(), so don't test\n", (char*)arg);
+    printf("[[[ %s_r ]]]: pipe() first then fork(), so don't test\n", (char*)arg);
     return NULL;
 }
 
@@ -37,11 +37,10 @@ void* f_fifo_w(void* arg)
     }
     
     fd = open("appfifo", O_WRONLY); // 单独open 读端或写端会阻塞,直到另一进程打开写或读。可以使用 O_NONBLOCK 避免阻塞
-    for (int i=0; i<3; ++i) {
+    for (int i=0; i<1; ++i) {
         time(&tp);
         int n = sprintf(buf, "fifo_w: timeis %s", ctime(&tp));  // ctime() 会加\n
         write(fd, buf, n+1);
-        sleep(1);
     }
     close(fd);
     return NULL;
@@ -60,7 +59,7 @@ void* f_fifo_r(void* arg)
 
     fd = open("appfifo", O_RDONLY);
     while((len = read(fd, buf, 1024)) > 0) // 读取FIFO管道
-        printf("fifo_r: %s", buf);
+        printf("[[[ fifo_r ]]]: %s", buf);
 
     close(fd);
     return NULL;
@@ -72,26 +71,7 @@ typedef struct {
     char c;
 } msq_st;
 
-void* f_msgqueue_r(void*) // 这里关
-{
-    char* const msqfile = "/etc/passwd";
-    key_t key;
-    int proj_id = 'z';
-    int msqid;
-    msq_st msg = {0};
-
-    key = ftok(msqfile, proj_id);
-    msqid = msgget(key, IPC_CREAT|0777);
-
-    msgrcv(msqid, &msg, sizeof(msg.a) + sizeof(msg.c), 888, 0);
-    printf("msgqueue_r: mtype=%ld, a={%d,%d,%d}, c=%c\n", msg.mtype,
-                                                         msg.a[0],
-                                                         msg.a[1],
-                                                         msg.a[2],
-                                                         msg.c);
-}
-
-void* f_msgqueue_w(void*)
+void* f_msgqueue_w(void* arg)
 {
     char* const msqfile = "/etc/passwd";
     key_t key;
@@ -112,6 +92,25 @@ void* f_msgqueue_w(void*)
     return NULL;
 }
 
+void* f_msgqueue_r(void* arg) // 这里关
+{
+    char* const msqfile = "/etc/passwd";
+    key_t key;
+    int proj_id = 'z';
+    int msqid;
+    msq_st msg = {0};
+
+    key = ftok(msqfile, proj_id);
+    msqid = msgget(key, IPC_CREAT|0777);
+
+    msgrcv(msqid, &msg, sizeof(msg.a) + sizeof(msg.c), 888, 0);
+    printf("[[[ msgqueue_r ]]]: mtype=%ld, a={%d,%d,%d}, c=%c\n", msg.mtype,
+                                                         msg.a[0],
+                                                         msg.a[1],
+                                                         msg.a[2],
+                                                         msg.c);
+}
+
 typedef struct {
     void* desc;
     void*(*f_w)(void*);
@@ -121,7 +120,7 @@ typedef struct {
 pcontext pcont[] = {
     {"pipe", f_pipe_w, f_pipe_r},
     {"fifo", f_fifo_w, f_fifo_r},
-    {"msg queue", f_msgqueue_w, f_msgqueue_r},
+    {"msg queue", f_msgqueue_w, f_msgqueue_r},    // 传递数据
 };
 
 int main(int argc, char** argv)
@@ -131,20 +130,19 @@ int main(int argc, char** argv)
     pthread_t ctid[255] = {0}, ptid[255];
 
     ppid = getpid();
-    printf("partent pid:%d\n", ppid);
+    printf("--- partent pid:%d\n", ppid);
     fflush(stdout);
 
 
     for (i = 0; i < sizeof(pcont)/sizeof(pcont[0]); ++i) {
         if ((pid = fork()) == 0) {
-            printf("child pid:%d\n", getpid());
+            printf("--- child pid:%d\n", getpid());
             /* IPC 写 */
             rt = pthread_create(&ctid[i], NULL, pcont[i].f_w, pcont[i].desc);
             break;
         }
     }
 
-    // printf("---- pid:%d ----\n", pid);
 
     if (!pid) {
         rt = pthread_join(ctid[i], NULL); // 在子进程中等待子线程
@@ -166,6 +164,6 @@ int main(int argc, char** argv)
             rt = pthread_join(ptid[i], NULL); // 这里父进程子线程比较多，就按顺序等得了
         }
     }
-    printf("%s pid:%d - rt:%d\n", (pid=getpid())==ppid?"partent":"child", pid, rt);
+    printf("%s pid:%d - rt:%d\n", (pid=getpid())==ppid?"--- partent":"--- child", pid, rt);
     return rt;
 }
