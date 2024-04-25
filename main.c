@@ -13,6 +13,8 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/sem.h>
+#include <string.h>
+#include <sys/shm.h>
 
 
 void* f_pipe_w(void* arg)
@@ -167,6 +169,47 @@ void* f_semaphore_r(void* arg)
     return NULL;
 }
 
+void* f_shmem_w(void* arg)
+{
+    char* const shmfile = "/etc/passwd";
+    key_t key;
+    int proj_id = 'y';
+    int shmid;
+    char* shm = NULL;
+    int SHMSIZE = 1024;
+
+    key = ftok(shmfile, proj_id);
+    shmid = shmget(key, SHMSIZE, IPC_CREAT|0666);
+
+    shm = shmat(shmid, 0, 0);
+    sprintf(shm, "aa-bb-cc-dd");
+
+    shmdt(shm);
+
+    return NULL;
+}
+
+void* f_shmem_r(void* arg)
+{
+    char* const shmfile = "/etc/passwd";
+    key_t key;
+    int proj_id = 'y';
+    int shmid;
+    char* shm = NULL;
+    int SHMSIZE = 1024;
+
+    key = ftok(shmfile, proj_id);
+    sleep(1); // 等待 f_shmem_w 给 shm 写字符串
+    shmid = shmget(key, SHMSIZE, IPC_CREAT|0666);  // IPC_EXCL|IPC_CREAT|0666 如果存在报错
+
+    shm = shmat(shmid, 0, 0);
+    printf("[[[ shmem_r ]]]: %s\n", shm);
+
+    shmdt(shm);
+    shmctl(shmid, IPC_RMID, NULL);
+    return NULL;
+}
+
 typedef struct {
     void* desc;
     void*(*f_w)(void*);
@@ -178,6 +221,7 @@ pcontext pcont[] = {
     {"fifo", f_fifo_w, f_fifo_r},
     {"msg queue", f_msgqueue_w, f_msgqueue_r},    // 传递数据
     {"semaphore", f_semaphore_w, f_semaphore_r},  // 一般仅计数
+    {"shmem", f_shmem_w, f_shmem_r},  // 高速通信
 };
 
 int main(int argc, char** argv)
