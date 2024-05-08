@@ -15,6 +15,7 @@
 #include <sys/sem.h>
 #include <string.h>
 #include <sys/shm.h>
+#include <sys/mman.h>
 
 
 void* f_pipe_w(void* arg)
@@ -210,6 +211,33 @@ void* f_shmem_r(void* arg)
     return NULL;
 }
 
+void* f_mmap_w(void* arg)
+{
+    size_t len = 20;
+    int fd = open("mmap.file", O_RDWR|O_CREAT|O_TRUNC, 0644); // O_RDWR不存在则创建 O_TRUNC截断成0长度
+    ftruncate(fd, 20); // 拓展文件大小为 20
+
+    char* p = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+
+    strcpy(p, "AA-BB-CC-DD");
+    munmap(p, len);
+
+    return NULL;
+}
+
+void* f_mmap_r(void* arg)
+{
+    size_t len = 20;
+    int fd = open("mmap.file", O_RDWR|O_CREAT, 0644);
+    sleep(1);
+
+    char* p = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    printf("[[[ mmap_r ]]]: %s\n", p);
+    munmap(p, len);
+
+    return NULL;
+}
+
 typedef struct {
     void* desc;
     void*(*f_w)(void*);
@@ -221,7 +249,8 @@ pcontext pcont[] = {
     {"fifo", f_fifo_w, f_fifo_r},
     {"msg queue", f_msgqueue_w, f_msgqueue_r},    // 传递数据
     {"semaphore", f_semaphore_w, f_semaphore_r},  // 一般仅计数
-    {"shmem", f_shmem_w, f_shmem_r},  // 高速通信
+    {"shmem", f_shmem_w, f_shmem_r},  // 在一块公共内存区建立映射，超高速通信
+    {"mmap", f_mmap_w, f_mmap_r},  // 在每个进程中都会开辟一段映射空间，比shmem略低效但是可持续化
 };
 
 int main(int argc, char** argv)
