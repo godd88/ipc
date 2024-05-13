@@ -12,15 +12,15 @@
  */
 #define MUTEX_LOOP_TIME 111111
 pthread_mutex_t mutex;
-int g_Mutex_Coount = 0;
+int g_Mutex_Count = 0;
 void* f_mutex_1(void* arg)
 {
     for (int i = 0; i < MUTEX_LOOP_TIME; i++) {
         pthread_mutex_lock(&mutex);
-        ++g_Mutex_Coount;
-        ++g_Mutex_Coount;
-        if (g_Mutex_Coount%2) { // 若是 奇数则打印
-            LOG_I(g_Mutex_Coount);
+        ++g_Mutex_Count;
+        ++g_Mutex_Count;
+        if (g_Mutex_Count%2) { // 若是 奇数则打印
+            LOG_I(g_Mutex_Count);
         }
         pthread_mutex_unlock(&mutex);
     }
@@ -30,10 +30,10 @@ void* f_mutex_2(void* arg)
 {
     for (int i = 0; i < MUTEX_LOOP_TIME; i++) {
         pthread_mutex_lock(&mutex);
-        ++g_Mutex_Coount;
-        ++g_Mutex_Coount;
-        if (g_Mutex_Coount%2) { // 若是 奇数则打印
-            LOG_I(g_Mutex_Coount);
+        ++g_Mutex_Count;
+        ++g_Mutex_Count;
+        if (g_Mutex_Count%2) { // 若是 奇数则打印
+            LOG_I(g_Mutex_Count);
         }
         pthread_mutex_unlock(&mutex);
     }
@@ -62,6 +62,37 @@ void* f_automic_2(void* arg)
     return NULL;
 }
 
+
+pthread_rwlock_t rwlock;
+void* f_rwlock_1(void* arg)
+{
+    // 1. 加读锁
+    pthread_rwlock_rdlock(&rwlock);
+    usleep(20000);
+    LOG_S("2nd");
+    pthread_rwlock_unlock(&rwlock);
+
+    pthread_rwlock_rdlock(&rwlock);
+    LOG_S("4th");
+    pthread_rwlock_unlock(&rwlock);
+    return NULL;
+}
+void* f_rwlock_2(void* arg)
+{
+    usleep(10000);
+    pthread_rwlock_rdlock(&rwlock);
+    LOG_S("1st");
+    pthread_rwlock_unlock(&rwlock);
+
+    // 2. 加写锁
+    pthread_rwlock_wrlock(&rwlock);
+    usleep(20000);
+    LOG_S("3th");
+    pthread_rwlock_unlock(&rwlock);
+    return NULL;
+}
+
+
 int main(int argc, char** argv)
 {
     int rt = 0;
@@ -72,10 +103,13 @@ int main(int argc, char** argv)
         f_mutex_2,
         f_automic_1,
         f_automic_2,
+        f_rwlock_1,
+        f_rwlock_2,
     };
     pthread_t tid[255] = {0};
 
     pthread_mutex_init(&mutex, NULL);
+    pthread_rwlock_init(&rwlock, NULL);
 
     for (i = 0; i < sizeof(f_list) / sizeof(f_list[0]); ++i) {
         rt |= pthread_create(&tid[i], NULL, f_list[i], NULL);
@@ -86,9 +120,11 @@ int main(int argc, char** argv)
     }
 
     pthread_mutex_destroy(&mutex);
+    LOG_I(g_Mutex_Count);
     int l_atomic = atomic_load(&g_Atomic);
-    LOG_I(g_No_Atomic); // 必然小于 AUTOMIC_LOOP_TIMEx2
+    LOG_I(g_No_Atomic); // 根本上测试结果都小于 AUTOMIC_LOOP_TIMEx2
     LOG_I(l_atomic);
+    pthread_rwlock_destroy(&rwlock);
 
     LOG_I(rt);
     return rt;
