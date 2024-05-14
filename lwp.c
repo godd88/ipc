@@ -93,6 +93,37 @@ void* f_rwlock_2(void* arg)
 }
 
 
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;       // 静态初始化
+pthread_mutex_t c_mutex = PTHREAD_MUTEX_INITIALIZER;  // 静态初始化 - 在编译时就初始化好了，不需要调用 destroy
+int g_Cond = 0;
+void* f_cond_1(void* arg)
+{
+    usleep(10000);
+    pthread_mutex_lock(&c_mutex);
+    ++g_Cond;
+    LOG_I(g_Cond);
+    pthread_mutex_unlock(&c_mutex);
+
+    pthread_cond_signal(&cond);     // 唤醒某个 cond 阻塞线程
+//  pthread_cond_broadcast(&cond);  // 唤醒所有 cond 阻塞线程，这里我们就一个阻塞线程
+
+    return NULL;
+}
+void* f_cond_2(void* arg)
+{
+    pthread_mutex_lock(&c_mutex);
+    if (g_Cond == 0) {
+        LOG_I(g_Cond);
+        pthread_cond_wait(&cond, &c_mutex);
+    }
+    --g_Cond;
+    LOG_I(g_Cond);
+    pthread_mutex_unlock(&c_mutex);
+    return NULL;
+}
+
+
+
 int main(int argc, char** argv)
 {
     int rt = 0;
@@ -105,6 +136,8 @@ int main(int argc, char** argv)
         f_automic_2,
         f_rwlock_1,
         f_rwlock_2,
+        f_cond_1,
+        f_cond_2,
     };
     pthread_t tid[255] = {0};
 
