@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdatomic.h>
+#include <semaphore.h>
 
 #define LOG_S(x)  printf("%s:: %s\n", __func__, x)
 #define LOG_I(x)  printf("%s:: %s = %d\n", __func__, #x, x)
@@ -123,6 +124,21 @@ void* f_cond_2(void* arg)
 }
 
 
+sem_t sem;
+void* f_sem_v(void* arg)
+{
+    usleep(10000);
+    sem_post(&sem);
+    LOG_S("first V");
+    return NULL;
+}
+void* f_sem_p(void* arg)
+{
+    sem_wait(&sem);
+    LOG_S("then P");
+    return NULL;
+}
+
 
 int main(int argc, char** argv)
 {
@@ -138,11 +154,14 @@ int main(int argc, char** argv)
         f_rwlock_2,
         f_cond_1,
         f_cond_2,
+        f_sem_p,
+        f_sem_v,
     };
     pthread_t tid[255] = {0};
 
     pthread_mutex_init(&mutex, NULL);
     pthread_rwlock_init(&rwlock, NULL);
+    sem_init(&sem, 0, 0); // 若pshared非0可以在父子进程间共享。value非0表示已经有n个资源
 
     for (i = 0; i < sizeof(f_list) / sizeof(f_list[0]); ++i) {
         rt |= pthread_create(&tid[i], NULL, f_list[i], NULL);
@@ -158,6 +177,7 @@ int main(int argc, char** argv)
     LOG_I(g_No_Atomic); // 根本上测试结果都小于 AUTOMIC_LOOP_TIMEx2
     LOG_I(l_atomic);
     pthread_rwlock_destroy(&rwlock);
+    sem_destroy(&sem);
 
     LOG_I(rt);
     return rt;
